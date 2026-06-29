@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dansk Flashcards — Learn Danish from the News</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- Mozilla Readability: client-side article extraction (no backend, no Claude) -->
+  <script src="https://cdn.jsdelivr.net/gh/mozilla/readability@0.5.0/Readability.js"></script>
+</head>
+<body>
+  <header class="hero">
+    <h1>🇩🇰 Dansk Flashcards</h1>
+    <p class="tagline">Paste a Danish news article. Get flashcards to learn the words.</p>
+  </header>
+
+  <main>
+    <section class="input-card">
+      <label for="url">Article URL</label>
+      <div class="input-row">
+        <input
+          id="url"
+          type="url"
+          placeholder="https://www.dr.dk/nyheder/..."
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button id="go">Generate</button>
+      </div>
+      <p class="hint">Works with most Danish news sites (DR, TV2, Politiken, Berlingske…).</p>
+    </section>
+
+    <p id="status" class="status" hidden></p>
+
+    <!-- Article overview -->
+    <section id="overview" class="overview" hidden>
+      <h2 id="article-title"></h2>
+      <p id="article-meta" class="meta"></p>
+      <p id="article-excerpt" class="excerpt"></p>
+      <details id="article-full">
+        <summary>Read full article text</summary>
+        <div id="article-body" class="body"></div>
+      </details>
+    </section>
+
+    <!-- Flashcards -->
+    <section id="cards-section" hidden>
+      <h2 class="cards-heading">Flashcards <span id="cards-count" class="count"></span></h2>
+      <p class="cards-hint">Tap a card to flip it.</p>
+      <div id="cards" class="cards"></div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Vocabulary translated via MyMemory · Article text via Mozilla Readability · No data stored.</p>
+  </footer>
+
+  <script src="stopwords.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
