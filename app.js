@@ -192,7 +192,39 @@ async function translateAll(vocab, onProgress) {
 
 // ---- Render ---------------------------------------------------------------
 
-function renderOverview(article) {
+// Prepare the fetched page for embedding: inject a <base> so the site's own
+// relative CSS/image/font URLs resolve back to the original domain (so it keeps
+// its real look), and force links to open in a new tab.
+function buildEmbedDoc(html, sourceUrl) {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  if (!doc.head) return html;
+
+  doc.querySelectorAll("base").forEach((b) => b.remove());
+  const base = doc.createElement("base");
+  base.href = sourceUrl;
+  base.target = "_blank";
+  doc.head.insertBefore(base, doc.head.firstChild);
+
+  return "<!doctype html>" + doc.documentElement.outerHTML;
+}
+
+// Embed the original page inside a sandboxed iframe (no allow-scripts => the
+// page's JS cannot run, so this stays safe with untrusted remote HTML). The
+// site's stylesheets/images still load, so it looks like the real article.
+function renderEmbed(html, sourceUrl) {
+  els.body.classList.add("body--embed");
+  els.body.innerHTML = "";
+
+  const frame = document.createElement("iframe");
+  frame.className = "embed-frame";
+  frame.setAttribute("sandbox", "");          // scripts/forms/popups all disabled
+  frame.setAttribute("referrerpolicy", "no-referrer");
+  frame.loading = "lazy";
+  frame.srcdoc = buildEmbedDoc(html, sourceUrl);
+  els.body.appendChild(frame);
+}
+
+function renderOverview(article, html, sourceUrl) {
   els.title.textContent = article.title || "Untitled article";
 
   const metaBits = [];
@@ -205,17 +237,7 @@ function renderOverview(article) {
   els.excerpt.textContent =
     article.excerpt || article.textContent.slice(0, 280).trim() + "…";
 
-  // Full text as paragraphs (textContent, not raw HTML — keeps it safe & clean).
-  els.body.innerHTML = "";
-  article.textContent
-    .split(/\n{2,}|\n/)
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0)
-    .forEach((p) => {
-      const el = document.createElement("p");
-      el.textContent = p;
-      els.body.appendChild(el);
-    });
+  renderEmbed(html, sourceUrl);
 
   els.overview.hidden = false;
 }
@@ -272,7 +294,7 @@ async function run() {
 
     status("Reading the article…", { busy: true });
     const article = extractArticle(html, url);
-    renderOverview(article);
+    renderOverview(article, html, url);
 
     const vocab = buildVocab(article.textContent);
     if (vocab.length === 0) throw new Error("No usable Danish words found.");
