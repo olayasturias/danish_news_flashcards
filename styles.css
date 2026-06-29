@@ -431,6 +431,11 @@ footer {
   max-width: 760px;
   margin: 0 auto;
 }
+footer .credit {
+  margin: 0.6rem 0 0;
+  color: var(--ink);
+}
+footer .credit strong { color: var(--terracotta); font-weight: 600; }
 
 /* spinner */
 .spin {
