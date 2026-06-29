@@ -15,7 +15,8 @@ const PROXIES = [
 const TRANSLATE_URL = (word) =>
   `https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}&langpair=da|en`;
 
-const MAX_CARDS = 24;       // how many vocab flashcards to build
+const VOCAB_LIMIT = 200;    // hard ceiling on candidate words (free API friendliness)
+const DEFAULT_COUNT = 24;   // words translated on the first run
 const MIN_WORD_LEN = 3;     // ignore very short tokens
 const TRANSLATE_CONCURRENCY = 4;
 
@@ -34,6 +35,19 @@ const els = {
   cardsSection: $("cards-section"),
   cards: $("cards"),
   cardsCount: $("cards-count"),
+  sortSwitch: $("sort-switch"),
+  count: $("count"),
+  countVal: $("count-val"),
+  countMax: $("count-max"),
+};
+
+// Holds the parsed candidates + translation cache so the slider/sort controls
+// can re-render without re-fetching or re-translating.
+const state = {
+  vocab: [],            // all candidates [{word, count}], frequency-ranked
+  cache: new Map(),     // word -> translation string | null (null = no gloss)
+  count: 0,             // how many top words to translate (slider value)
+  sort: "alpha",        // "alpha" | "random"
 };
 
 // ---- Status helpers -------------------------------------------------------
@@ -99,7 +113,7 @@ function buildVocab(text) {
 
   return [...freq.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .slice(0, MAX_CARDS)
+    .slice(0, VOCAB_LIMIT)
     .map(([word, count]) => ({ word, count }));
 }
 
@@ -166,28 +180,49 @@ async function translateWord(word) {
   }
 }
 
-// Run translations with limited concurrency to stay friendly to the free API.
-async function translateAll(vocab, onProgress) {
-  const results = [];
+// Translate the top `n` candidate words, skipping any already in the cache.
+// Limited concurrency keeps us friendly to the free API.
+async function ensureTranslated(n, onProgress) {
+  const targets = state.vocab
+    .slice(0, n)
+    .filter((v) => !state.cache.has(v.word));
+  if (!targets.length) return;
+
   let i = 0;
   let done = 0;
 
   async function worker() {
-    while (i < vocab.length) {
+    while (i < targets.length) {
       const idx = i++;
-      const entry = vocab[idx];
-      const translation = await translateWord(entry.word);
-      results[idx] = { ...entry, translation };
-      onProgress(++done, vocab.length);
+      const word = targets[idx].word;
+      const translation = await translateWord(word);
+      state.cache.set(word, translation);
+      if (onProgress) onProgress(++done, targets.length);
     }
   }
 
-  const workers = Array.from(
-    { length: Math.min(TRANSLATE_CONCURRENCY, vocab.length) },
-    worker
+  await Promise.all(
+    Array.from({ length: Math.min(TRANSLATE_CONCURRENCY, targets.length) }, worker)
   );
-  await Promise.all(workers);
-  return results.filter((r) => r.translation);
+}
+
+// The cards to show right now: top `count` words that have a translation,
+// ordered by the active sort.
+function visibleCards() {
+  const cards = state.vocab
+    .slice(0, state.count)
+    .map((v) => ({ word: v.word, translation: state.cache.get(v.word) }))
+    .filter((c) => c.translation);
+
+  if (state.sort === "alpha") {
+    cards.sort((a, b) => a.word.localeCompare(b.word, "da"));
+  } else {
+    for (let i = cards.length - 1; i > 0; i--) {       // Fisher–Yates shuffle
+      const j = Math.floor(Math.random() * (i + 1));
+      [cards[i], cards[j]] = [cards[j], cards[i]];
+    }
+  }
+  return cards;
 }
 
 // ---- Render ---------------------------------------------------------------
@@ -267,6 +302,17 @@ function renderCards(cards) {
   els.cardsSection.hidden = false;
 }
 
+function rerender() {
+  renderCards(visibleCards());
+}
+
+function setActiveSort(sort) {
+  state.sort = sort;
+  els.sortSwitch.querySelectorAll(".seg").forEach((b) =>
+    b.classList.toggle("active", b.dataset.sort === sort)
+  );
+}
+
 // ---- Main flow ------------------------------------------------------------
 
 async function run() {
@@ -296,17 +342,27 @@ async function run() {
     const article = extractArticle(html, url);
     renderOverview(article, html, url);
 
-    const vocab = buildVocab(article.textContent);
-    if (vocab.length === 0) throw new Error("No usable Danish words found.");
+    state.vocab = buildVocab(article.textContent);
+    state.cache = new Map();
+    if (state.vocab.length === 0) throw new Error("No usable Danish words found.");
 
-    status(`Translating vocabulary… 0/${vocab.length}`, { busy: true });
-    const cards = await translateAll(vocab, (done, total) => {
+    // Configure controls now that we know how many words were parsed.
+    state.count = Math.min(DEFAULT_COUNT, state.vocab.length);
+    state.sort = "alpha";
+    els.count.max = state.vocab.length;
+    els.count.value = state.count;
+    els.countVal.textContent = state.count;
+    els.countMax.textContent = state.vocab.length;
+    setActiveSort("alpha");
+
+    status(`Translating vocabulary… 0/${state.count}`, { busy: true });
+    await ensureTranslated(state.count, (done, total) => {
       status(`Translating vocabulary… ${done}/${total}`, { busy: true });
     });
 
-    if (cards.length === 0) throw new Error("Translation service returned nothing. Try again.");
-
-    renderCards(cards);
+    rerender();
+    if (els.cards.children.length === 0)
+      throw new Error("Translation service returned nothing. Try again.");
     clearStatus();
   } catch (e) {
     status(e.message || "Something went wrong.", { error: true });
@@ -318,4 +374,36 @@ async function run() {
 els.go.addEventListener("click", run);
 els.url.addEventListener("keydown", (e) => {
   if (e.key === "Enter") run();
+});
+
+// Sort switch: A–Z vs Random. Reorders the already-translated cards only.
+els.sortSwitch.addEventListener("click", (e) => {
+  const btn = e.target.closest(".seg");
+  if (!btn || btn.dataset.sort === state.sort) return;
+  setActiveSort(btn.dataset.sort);
+  rerender();
+});
+
+// Slider: how many top words to translate. Live label on input; on release,
+// translate any newly-needed words (cached ones are skipped) and re-render.
+els.count.addEventListener("input", () => {
+  els.countVal.textContent = els.count.value;
+});
+els.count.addEventListener("change", async () => {
+  state.count = Number(els.count.value);
+  els.go.disabled = true;
+  els.count.disabled = true;
+  try {
+    status(`Translating vocabulary… 0/${state.count}`, { busy: true });
+    await ensureTranslated(state.count, (done, total) => {
+      status(`Translating vocabulary… ${done}/${total}`, { busy: true });
+    });
+    rerender();
+    clearStatus();
+  } catch {
+    status("Translation failed. Try again.", { error: true });
+  } finally {
+    els.go.disabled = false;
+    els.count.disabled = false;
+  }
 });

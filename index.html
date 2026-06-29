@@ -4,13 +4,40 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dansk Flashcards — Learn Danish from the News</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
   <link rel="stylesheet" href="styles.css" />
   <!-- Mozilla Readability: client-side article extraction (no backend, no Claude) -->
   <script src="https://cdn.jsdelivr.net/gh/mozilla/readability@0.5.0/Readability.js"></script>
 </head>
 <body>
+  <!-- Scandinavian geometric decoration (purely decorative) -->
+  <div class="decor" aria-hidden="true">
+    <span class="d-arch"></span>
+    <span class="d-ring"></span>
+    <span class="d-pill"></span>
+    <span class="d-circle"></span>
+    <svg class="d-dots" width="104" height="104">
+      <defs>
+        <pattern id="dots" width="20" height="20" patternUnits="userSpaceOnUse">
+          <circle cx="3" cy="3" r="2.6" fill="#bcb4a4" />
+        </pattern>
+      </defs>
+      <rect width="104" height="104" fill="url(#dots)" />
+    </svg>
+    <svg class="d-wave" width="150" height="34" viewBox="0 0 150 34" fill="none">
+      <path d="M3 17 Q21 2 39 17 T75 17 T111 17 T147 17" stroke="#6f7d63"
+            stroke-width="3" stroke-linecap="round" />
+    </svg>
+  </div>
+
   <header class="hero">
-    <h1>🇩🇰 Dansk Flashcards</h1>
+    <p class="eyebrow"><span class="flag"></span> Dansk · Ordforråd</p>
+    <h1>Dansk Flashcards</h1>
     <p class="tagline">Paste a Danish news article. Get flashcards to learn the words.</p>
   </header>
 
@@ -47,6 +74,23 @@
     <section id="cards-section" hidden>
       <h2 class="cards-heading">Flashcards <span id="cards-count" class="count"></span></h2>
       <p class="cards-hint">Tap a card to flip it.</p>
+
+      <div class="cards-controls">
+        <div class="control">
+          <span class="control-label">Order</span>
+          <div class="switch" id="sort-switch" role="group" aria-label="Card order">
+            <button type="button" class="seg active" data-sort="alpha">A–Z</button>
+            <button type="button" class="seg" data-sort="random">Random</button>
+          </div>
+        </div>
+        <div class="control control--slider">
+          <label class="control-label" for="count">
+            Words <span id="count-val">0</span> / <span id="count-max">0</span>
+          </label>
+          <input type="range" id="count" min="1" max="1" value="1" />
+        </div>
+      </div>
+
       <div id="cards" class="cards"></div>
     </section>
   </main>
